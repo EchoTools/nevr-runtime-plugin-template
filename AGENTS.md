@@ -29,12 +29,13 @@ mod, or nEVR won't load it.
 | `tests/test_check_mod.py`, `tests/test_check_pr_title.py` | Tests of the checks themselves | add to them |
 | `justfile` | `just verify` and the recipes under it | rarely |
 | `.clang-format` | The code style (4 spaces, 120 columns); `just fmt` applies it | no |
-| `.github/workflows/release.yml` | Builds and publishes releases with a build attestation | **never** |
+| `NOTICE` | Credits and notices that travel with the DLL in the release zip | yes |
+| `.github/workflows/release.yml` | Builds, attests and drafts releases (the release signer publishes them) | **never** |
 | `.github/workflows/build.yml` | Format, lint, build, smoke test, checks and tests on every push | no |
 | `.github/workflows/pr-title-check.yml` | Fails a PR whose title isn't a Conventional Commits header | no |
 
-The launcher only takes release files built and attested by this repo's unmodified
-`release.yml`. Don't edit it, don't rename it, don't attach files to a release by hand.
+The launcher and the release signer only take release files built and attested by this repo's
+unmodified `release.yml`. Don't edit it, don't rename it, don't attach files to a release by hand.
 
 ## Commands
 
@@ -173,6 +174,12 @@ beside its own plugins. A mod should work there too or return non-zero from init
 12. **No cheats, no data collection,** no network use beyond what the mod is for.
 13. **Never write into the game's folders** except the mod's own log folder and a settings file
     the `.plugin.json` names. Never touch other plugins' files, `config.yaml`, or `BugSplat64.dll`.
+14. **The DLL carries its build identity:** exactly one `\0NEVR-PLUGIN-BUILD <version> <commit>\0`
+    literal (`src/plugin.cpp`; CMake fills in the version from `echo-mod.json` and the commit from
+    `GITHUB_SHA`, or `git rev-parse HEAD` on your machine, or 40 zeros with no git). The release signer
+    compares it with the tag and the commit that was built. Never `NEVR-BUILD`: nEVR's installer takes any
+    DLL holding that for the runtime itself. `Init` logs the literal; keep a use of it, or the linker's
+    `--gc-sections` drops it. `check_mod.py` refuses a DLL with none, two, or the wrong version.
 
 ## Commits and PR titles
 
@@ -271,14 +278,21 @@ launcher installs NvrContentOverlay itself, and packs need an nEVR with the earl
 1. Bump `version` in `echo-mod.json` (semver: a breaking change for players or other mods bumps
    MAJOR, a feature MINOR, a fix PATCH; a test build gets a prerelease part: `1.3.0-beta.1`).
 2. Commit, tag `v<version>` on that commit, push the tag. Nothing else.
-3. `release.yml` builds, smoke-tests, checks the tag against the manifest, packs `dist/`
-   (`<file>` or the pack zip, `echo-mod.json` with `version`, `prerelease`, `sha256`, `size`,
-   `settings` and `source` filled in, `SHA256SUMS`), checks `dist/` with the template's
-   current `tools/check_mod.py --published` (the same check the launcher's catalogue applies),
-   attests the files and creates the GitHub release (a prerelease when the version has a
-   prerelease part).
-4. Within about 5 minutes the catalogue has it; the result ("live", or why not) is a comment
-   on the mod's submission issue.
+3. `release.yml` builds (the tag's commit goes into the DLL's identity, rule 14), smoke-tests, checks
+   the tag against the manifest, packs `dist/`, checks `dist/` with this repo's own
+   `tools/check_mod.py --published`, attests the files and opens a **draft** GitHub release (a
+   prerelease when the version has a prerelease part). The draft has exactly three files:
+   - `<id>-v<version>-windows.zip`: the DLL, `LICENSE`, `NOTICE` (when the repo has one), the
+     `<Stem>.plugin.json` settings sheet (when the mod has settings) and a `SHA256SUMS` over those.
+     Flat, fixed dates, so the same files make the same zip.
+   - `echo-mod.json`: the manifest with `version`, `prerelease`, `settings`, `package` and `source`
+     filled in. It has no `sha256` or `size`: signing changes the DLL's bytes.
+   - `SHA256SUMS`: the zip and `echo-mod.json`.
+4. A draft is not live. For a mod EchoTools releases, the project's release signer takes the
+   attested files, signs the DLL inside the zip, replaces the zip and its sums in the draft and
+   publishes it; the signer's plugin-release spec lists what it checks. Nobody uploads or edits files
+   by hand, the author included. Once the release is published the catalogue picks it up (about 5
+   minutes) and the result ("live", or why not) is a comment on the mod's submission issue.
 
 Published versions are immutable: never move or reuse a tag, never replace release files. A
 broken release is fixed by a new version. A published version that must not be used any more
