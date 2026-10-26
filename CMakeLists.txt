@@ -117,10 +117,20 @@ if(ECHO_MOD_MINHOOK)
     target_compile_definitions(mod PRIVATE ECHO_MOD_MINHOOK=1)
 endif()
 
+# Warnings are errors in CI (-DECHO_MOD_WERROR=ON, set by tools/ci-build.sh); off by default so a
+# newer compiler never blocks someone's local build.
+option(ECHO_MOD_WERROR "Treat compiler warnings as errors" OFF)
+
 if(MSVC)
     target_compile_options(mod PRIVATE /W4 /utf-8)
+    if(ECHO_MOD_WERROR)
+        target_compile_options(mod PRIVATE /WX)
+    endif()
 else()
     target_compile_options(mod PRIVATE -Wall -Wextra)
+    if(ECHO_MOD_WERROR)
+        target_compile_options(mod PRIVATE -Werror)
+    endif()
     # Only what exports.def lists leaves the DLL.
     target_link_options(mod PRIVATE -Wl,--exclude-all-symbols)
 endif()
