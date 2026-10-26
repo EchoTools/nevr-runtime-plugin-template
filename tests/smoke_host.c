@@ -11,11 +11,10 @@
  *   - Shutdown and unloading don't crash.
  * Exit code 0 when all of that holds.
  */
-#include <windows.h>
-
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <windows.h>
 
 typedef struct {
     const char* name;
@@ -44,9 +43,13 @@ typedef void (*ShutdownFn)(void);
 static int host_log_lines = 0;
 
 static int plugin_count(void) { return 0; }
-static const void* plugin_info(int index) { (void)index; return NULL; }
+static const void* plugin_info(int index) {
+    (void)index;
+    return NULL;
+}
 static void host_log(const char* id, uint32_t level, const char* message, const void* fields, uint32_t n) {
-    (void)fields; (void)n;
+    (void)fields;
+    (void)n;
     host_log_lines++;
     fprintf(stderr, "[host log] %s level %u: %s\n", id ? id : "?", level, message ? message : "");
 }
@@ -56,9 +59,12 @@ static void put_json(const char* s) {
     putchar('"');
     for (; s && *s; s++) {
         unsigned char c = (unsigned char)*s;
-        if (c == '"' || c == '\\') printf("\\%c", c);
-        else if (c < 0x20) printf("\\u%04x", c);
-        else putchar(c);
+        if (c == '"' || c == '\\')
+            printf("\\%c", c);
+        else if (c < 0x20)
+            printf("\\u%04x", c);
+        else
+            putchar(c);
     }
     putchar('"');
 }
@@ -67,8 +73,10 @@ static void put_json(const char* s) {
 static int round_trip(const wchar_t* path, const Context* ctx, int print) {
     HMODULE dll = LoadLibraryExW(path, NULL, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!dll) {
-        fprintf(stderr, "can't load the DLL (error %lu): it needs a DLL that isn't beside it or in System32, "
-                        "or it isn't 64-bit\n", GetLastError());
+        fprintf(stderr,
+                "can't load the DLL (error %lu): it needs a DLL that isn't beside it or in System32, "
+                "or it isn't 64-bit\n",
+                GetLastError());
         return -1000;
     }
     GetInfoFn get_info = (GetInfoFn)GetProcAddress(dll, "NvrPluginGetInfo");
@@ -95,10 +103,11 @@ static int round_trip(const wchar_t* path, const Context* ctx, int print) {
         put_json(info.name);
         printf(",\"description\":");
         put_json(info.description);
-        printf(",\"version\":\"%u.%u.%u\",\"api\":%u,\"capabilities\":%u,\"init\":%d,"
-               "\"has_init_ex\":%s,\"has_init\":%s,\"has_shutdown\":%s}\n",
-               info.version_major, info.version_minor, info.version_patch, api, caps, result,
-               init_ex ? "true" : "false", init ? "true" : "false", shutdown ? "true" : "false");
+        printf(
+            ",\"version\":\"%u.%u.%u\",\"api\":%u,\"capabilities\":%u,\"init\":%d,"
+            "\"has_init_ex\":%s,\"has_init\":%s,\"has_shutdown\":%s}\n",
+            info.version_major, info.version_minor, info.version_patch, api, caps, result, init_ex ? "true" : "false",
+            init ? "true" : "false", shutdown ? "true" : "false");
         fflush(stdout);
     }
     FreeLibrary(dll);
@@ -132,8 +141,9 @@ int wmain(int argc, wchar_t** argv) {
     int first = round_trip(path, &v6, 1);
     if (first == -1000) return 1;
     if (first == 0) {
-        fprintf(stderr, "init returned 0 outside echovr.exe 631547: check the game build first and return "
-                        "non-zero when it isn't the one you know\n");
+        fprintf(stderr,
+                "init returned 0 outside echovr.exe 631547: check the game build first and return "
+                "non-zero when it isn't the one you know\n");
         return 1;
     }
     int second = round_trip(path, &v5, 0);

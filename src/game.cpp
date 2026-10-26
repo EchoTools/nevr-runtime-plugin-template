@@ -1,5 +1,6 @@
 // Where the mod runs: the game build, its command line, and nEVR's runtime exports.
 #include <windows.h>
+
 #include <shellapi.h>
 
 #include <cstring>
