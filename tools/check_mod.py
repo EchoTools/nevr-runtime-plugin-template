@@ -7,9 +7,11 @@ the smoke host found when it loaded the DLL.
     python3 tools/check_mod.py --dll ... --smoke smoke.json --tag v0.1.0
     python3 tools/check_mod.py --published dist --tag v0.1.0   # a release as package.py made it
 
---published checks what a release publishes (echo-mod.json, the DLL or the pack's zip,
-SHA256SUMS) by the same rules the echo-mods check and the launcher's catalogue apply to every
-release: the release workflow runs it before it publishes anything.
+--published checks what a release publishes (echo-mod.json, the mod's <id>-v<version>-windows.zip
+or the pack's zip, SHA256SUMS) by the rules the echo-mods check, the launcher's catalogue and the
+release signer apply to every release: the release workflow runs it before it creates the draft.
+A mod's release is exactly three files, and the DLL inside the zip carries one
+NEVR-PLUGIN-BUILD <version> <commit> literal that release-signer compares with the tag.
 
 Exit code 0 when nothing is wrong. Warnings don't fail the check. Python 3.8+, no packages.
 """
@@ -19,6 +21,7 @@ import hashlib
 import json
 import re
 import shutil
+import stat
 import struct
 import sys
 import tempfile
@@ -92,6 +95,16 @@ NETWORK_DLLS = {"ws2_32.dll", "mswsock.dll", "wininet.dll", "winhttp.dll", "iphl
 # Runtimes that are never there: link them statically (-static / /MT).
 RUNTIME_DLLS = re.compile(r"^(libstdc\+\+|libgcc_s|libwinpthread|vcruntime|msvcp|concrt|vcomp|ucrtbased|msvcr\d)",
                           re.I)
+
+# The build identity every DLL carries (src/plugin.cpp): one NUL-bounded literal, which
+# release-signer compares with the release's tag and the attested commit. Never NEVR-BUILD: the
+# nEVR installer takes any DLL holding "NEVR-BUILD " for the runtime itself.
+IDENTITY = re.compile(rb"\x00NEVR-PLUGIN-BUILD ([0-9A-Za-z.+-]+) ([0-9a-f]{40})\x00")
+# What a mod's release zip may hold (flat, no directories), and the date every entry has.
+ZIP_DATE = (1980, 1, 1, 0, 0, 0)
+ZIP_ENTRY_MAX = 16 << 20
+# Names Windows treats as the same file, or can't create.
+WINDOWS_BAD_NAME = re.compile(r'[<>:"|?*\x00-\x1f]|[. ]$')
 
 
 class Report:
@@ -302,7 +315,26 @@ def read_pe(data, report):
     return exports, imports
 
 
-def check_dll(path, manifest, report):
+def check_identity(data, manifest, report, commit=None):
+    """The DLL holds exactly one NEVR-PLUGIN-BUILD literal; its version is the manifest's and, when
+    `commit` is given (a release), its commit is that one."""
+    if b"NEVR-BUILD " in data:
+        report.error("the DLL contains \"NEVR-BUILD \": that is the nEVR runtime's own stamp (the installer would "
+                     "take the DLL for the runtime); a mod carries NEVR-PLUGIN-BUILD")
+    found = IDENTITY.findall(data)
+    if len(found) != 1 or data.count(b"NEVR-PLUGIN-BUILD") != 1:
+        report.error("the DLL must contain exactly one \\0NEVR-PLUGIN-BUILD <version> <commit>\\0 literal (src/plugin.cpp "
+                     f"has it; it is referenced at run time so the linker keeps it): found {len(found)} well-formed, "
+                     f"{data.count(b'NEVR-PLUGIN-BUILD')} mention(s)")
+        return
+    version, sha = (x.decode("ascii") for x in found[0])
+    if version != manifest.get("version"):
+        report.error(f"the DLL's NEVR-PLUGIN-BUILD says version {version}, echo-mod.json {manifest.get('version')}")
+    if commit is not None and sha != commit:
+        report.error(f"the DLL's NEVR-PLUGIN-BUILD says commit {sha}, the release is built from {commit}")
+
+
+def check_dll(path, manifest, report, commit=None):
     data = Path(path).read_bytes()
     if Path(path).name != manifest.get("file"):
         report.error(f"the DLL is called {Path(path).name}, echo-mod.json says {manifest.get('file')}")
@@ -317,6 +349,7 @@ def check_dll(path, manifest, report):
     stray = sorted(e for e in exports if not e.startswith("Nvr"))
     if stray:
         report.warn("exports beyond the plugin's own: " + ", ".join(stray[:10]) + (" ..." if len(stray) > 10 else ""))
+    check_identity(data, manifest, report, commit)
     report.note(f"{len(data)} bytes, imports: " + ", ".join(imports))
     caps = set(manifest.get("capabilities") or [])
     for dll in imports:
@@ -365,6 +398,109 @@ def main_file(manifest):
     return manifest.get("file")
 
 
+def parse_sums(text):
+    """{name: digest} of a SHA256SUMS text; None when a line isn't `<sha256>  <name>`."""
+    sums = {}
+    for line in text.splitlines():
+        parts = line.split("  ", 1)
+        if len(parts) != 2 or not re.fullmatch(r"[0-9a-f]{64}", parts[0]) or parts[1] in sums:
+            return None
+        sums[parts[1]] = parts[0]
+    return sums
+
+
+def release_zip_name(manifest):
+    return f"{manifest.get('id')}-v{manifest.get('version')}-windows.zip"
+
+
+def check_release(work, manifest, report):
+    """A mod's release as release-signer takes it: exactly three files in `work` --
+    <id>-v<version>-windows.zip, echo-mod.json (without sha256 or size: signing changes the DLL's
+    bytes), SHA256SUMS (the zip and echo-mod.json) -- and in the zip, flat and with fixed dates: the
+    DLL, LICENSE, NOTICE if there is one, <Stem>.plugin.json when the mod has settings, and a
+    SHA256SUMS over the others. Returns (manifest, the DLL to load-test, or None)."""
+    package = release_zip_name(manifest)
+    if manifest.get("package") != package:
+        report.error(f"echo-mod.json: \"package\" must be {package} (<id>-v<version>-windows.zip), not "
+                     f"{manifest.get('package')!r}")
+    for key in ("sha256", "size"):
+        if key in manifest:
+            report.error(f"echo-mod.json: \"{key}\" doesn't belong in a release: signing changes the DLL's bytes, "
+                         "the final hashes are in SHA256SUMS")
+    names = sorted(p.name for p in work.iterdir())
+    for name in names:
+        if name not in (package, "echo-mod.json", "SHA256SUMS"):
+            report.error(f"the release has {name}: its files are exactly {package}, echo-mod.json and SHA256SUMS")
+    if not (work / package).is_file():
+        report.error(f"the release lacks {package}")
+        return manifest, None
+
+    try:
+        top = parse_sums((work / "SHA256SUMS").read_text(encoding="utf-8"))
+    except OSError:
+        top = None
+        report.error("the release has no SHA256SUMS")
+    else:
+        want = {package: sha256(work / package), "echo-mod.json": sha256(work / "echo-mod.json")}
+        if top != want:
+            report.error("SHA256SUMS must have exactly one line for the zip and one for echo-mod.json, matching them")
+
+    settings = manifest.get("settings")
+    sheet = f"{str(manifest.get('file'))[:-4]}.plugin.json"
+    required = {str(manifest.get("file")), "LICENSE", "SHA256SUMS"} | ({sheet} if settings else set())
+    allowed = required | {"NOTICE"}
+    try:
+        zf = zipfile.ZipFile(work / package)
+    except zipfile.BadZipFile:
+        report.error(f"{package} isn't a zip")
+        return manifest, None
+    with zf:
+        infos = zf.infolist()
+        seen = set()
+        for info in infos:
+            name = info.filename
+            if info.is_dir() or "/" in name or "\\" in name:
+                report.error(f"{package}: {name!r}: the zip is flat, files only")
+            elif name not in allowed:
+                report.error(f"{package}: {name!r} isn't one of: " + ", ".join(sorted(allowed)))
+            if WINDOWS_BAD_NAME.search(name) or name.lower() in seen:
+                report.error(f"{package}: {name!r} is not a name Windows can hold apart from the others")
+            seen.add(name.lower())
+            mode = info.external_attr >> 16
+            if mode and stat.S_IFMT(mode) not in (0, stat.S_IFREG):
+                kind = "a symlink" if stat.S_ISLNK(mode) else "a special entry"
+                report.error(f"{package}: {name!r} is {kind}")
+            if info.date_time != ZIP_DATE:
+                report.error(f"{package}: {name!r} has the date {info.date_time}, not the fixed {ZIP_DATE}")
+            if info.file_size > ZIP_ENTRY_MAX:
+                report.error(f"{package}: {name!r} is over {ZIP_ENTRY_MAX >> 20} MiB")
+        have = {i.filename for i in infos}
+        for name in sorted(required - have):
+            report.error(f"{package} lacks {name}")
+        if len(have) != len(infos):
+            report.error(f"{package} has an entry twice")
+        if "SHA256SUMS" in have:
+            inner = parse_sums(zf.read("SHA256SUMS").decode("utf-8", "replace"))
+            body = {i.filename: hashlib.sha256(zf.read(i.filename)).hexdigest()
+                    for i in infos if i.filename != "SHA256SUMS" and i.file_size <= ZIP_ENTRY_MAX}
+            if inner != body:
+                report.error(f"{package}: the inner SHA256SUMS doesn't list exactly the other files, matching them")
+        file = str(manifest.get("file"))
+        if file not in have or any(i.file_size > ZIP_ENTRY_MAX for i in infos if i.filename == file):
+            return manifest, None
+        # Outside the release's folder: the release workflow uploads all of it.
+        out = Path(tempfile.mkdtemp(prefix="check_mod-"))
+        atexit.register(shutil.rmtree, out, True)
+        (out / file).write_bytes(zf.read(file))
+        return manifest, out / file
+
+
+def release_commit(manifest):
+    """The commit a release was built from (package.py records it from GITHUB_SHA), or None."""
+    commit = (manifest.get("source") or {}).get("commit")
+    return commit if isinstance(commit, str) and commit else None
+
+
 def check_published(work, tag, prerelease, report):
     """A release as the release workflow publishes it, in folder `work`: echo-mod.json, the DLL
     or the pack's zip, SHA256SUMS. `tag` is the release's tag, `prerelease` its GitHub flag.
@@ -385,6 +521,8 @@ def check_published(work, tag, prerelease, report):
     if SEMVER.match(version) and bool(prerelease) != is_prerelease(version):
         report.error("the GitHub prerelease flag doesn't match the version: a version with a prerelease part "
                      "(1.2.0-beta.1) is a prerelease, any other isn't")
+    if manifest.get("kind", "mod") != "pack":
+        return check_release(work, manifest, report)
     main = main_file(manifest)
     if not isinstance(main, str) or not (work / main).is_file():
         report.error(f"the release lacks {main}, the file its echo-mod.json names")
@@ -401,11 +539,8 @@ def check_published(work, tag, prerelease, report):
     for name, have in ((main, digest), ("echo-mod.json", sha256(work / "echo-mod.json"))):
         if sums and sums.get(name) != have:
             report.error(f"{name} doesn't match SHA256SUMS")
-    want = manifest.get("sha256") if manifest.get("kind", "mod") == "mod" else (manifest.get("pack") or {}).get("sha256")
-    if want != digest:
+    if (manifest.get("pack") or {}).get("sha256") != digest:
         report.error(f"{main} doesn't match the sha256 in echo-mod.json")
-    if manifest.get("kind", "mod") != "pack":
-        return manifest, work / main
     # A pack: plugins/<file> and content/<content id>/, nothing else, no path out of either.
     content = str((manifest.get("pack") or {}).get("content", ""))
     inner = f"plugins/{manifest.get('file')}"
@@ -448,7 +583,7 @@ def main():
         version = json.loads((Path(args.published) / "echo-mod.json").read_text(encoding="utf-8")).get("version", "")
         manifest, dll = check_published(args.published, args.tag, is_prerelease(str(version)), report)
         if dll is not None:
-            check_dll(str(dll), manifest, report)
+            check_dll(str(dll), manifest, report, commit=release_commit(manifest))
         if args.smoke and manifest:
             check_smoke(args.smoke, manifest, report)
         report.print()
