@@ -117,6 +117,16 @@ if(ECHO_MOD_MINHOOK)
     target_compile_definitions(mod PRIVATE ECHO_MOD_MINHOOK=1)
 endif()
 
+# Off by default: the plugin-asset example (examples/assets). It registers an asset, so it needs API 7.
+option(ECHO_MOD_ASSET_EXAMPLE "Build the plugin-asset example (examples/assets/asset_example.cpp)" OFF)
+if(ECHO_MOD_ASSET_EXAMPLE)
+    if(MOD_API LESS 7)
+        message(FATAL_ERROR "ECHO_MOD_ASSET_EXAMPLE needs \"api\": 7 in echo-mod.json (plugin assets are API v7)")
+    endif()
+    target_sources(mod PRIVATE examples/assets/asset_example.cpp)
+    target_compile_definitions(mod PRIVATE ECHO_MOD_ASSET_EXAMPLE=1)
+endif()
+
 if(MSVC)
     target_compile_options(mod PRIVATE /W4 /utf-8)
 else()

@@ -70,4 +70,10 @@ bool BytesAt(uintptr_t rva, const uint8_t* expected, size_t size);
 // BugSplat64.dll, then dbgcore.dll. Null when no loaded module has it (an older nEVR, EchoLoader).
 void* RuntimeExport(const char* name);
 
+// ---- plugin assets (API v7): examples/assets/asset_example.cpp, built only with -DECHO_MOD_ASSET_EXAMPLE=ON ----
+#ifdef ECHO_MOD_ASSET_EXAMPLE
+bool AssetExampleStart();
+void AssetExampleStop();
+#endif
+
 }  // namespace mod
