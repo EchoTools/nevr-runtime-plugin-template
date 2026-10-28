@@ -5,7 +5,7 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 
 mod_file := `python3 -c 'import json; print(json.load(open("echo-mod.json"))["file"])'`
 version := `python3 -c 'import json; print(json.load(open("echo-mod.json"))["version"])'`
-sources := "src/*.cpp src/*.h tests/smoke_host.c"
+sources := "src/*.cpp src/*.h tests/smoke_host.c examples/assets/*.cpp"
 
 default:
     @just --list

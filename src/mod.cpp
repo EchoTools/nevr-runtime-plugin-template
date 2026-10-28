@@ -26,6 +26,10 @@ bool Start(const NvrGameContext* ctx) {
             if (p) Log("beside %s %u.%u.%u", p->name, p->version_major, p->version_minor, p->version_patch);
         }
     }
+#ifdef ECHO_MOD_ASSET_EXAMPLE
+    // Off by default. Registers one plugin-carried asset (examples/assets/asset_example.cpp).
+    if (!AssetExampleStart()) return false;
+#endif
     return true;
 }
 
@@ -36,6 +40,11 @@ void StateChanged(const NvrGameContext*, uint32_t old_state, uint32_t new_state)
         Log("game state %u -> %u (frame %llu)", old_state, new_state, static_cast<unsigned long long>(g_frames));
 }
 
-void Stop() { Log("stopped after %llu frames", static_cast<unsigned long long>(g_frames)); }
+void Stop() {
+    Log("stopped after %llu frames", static_cast<unsigned long long>(g_frames));
+#ifdef ECHO_MOD_ASSET_EXAMPLE
+    AssetExampleStop();
+#endif
+}
 
 }  // namespace mod

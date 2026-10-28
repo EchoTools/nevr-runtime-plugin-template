@@ -69,6 +69,14 @@ Then `git diff` the result: the only changes outside your own files should be th
 | `network` | talks to the internet or opens sockets |
 | `hooks-engine` | hooks the game's functions itself (needed with MinHook) |
 
+### Plugin assets (API v7)
+
+A mod can carry a level or resource inside its own DLL and register it with nEVR. That is not a
+capability: nevr-runtime declares no bit for it. Set `"api": 7` in `echo-mod.json` and declare the
+capabilities that match what the mod does. The rules, the status values and the example are in
+[AGENTS.md](AGENTS.md#plugin-assets-api-v7). The contract itself is in nevr-runtime's
+[docs/reference/plugin-assets.md](https://github.com/EchoTools/nevr-runtime/blob/main/docs/reference/plugin-assets.md).
+
 ## 2. Build it
 
 **Easiest: let GitHub build it.** Every push runs the **build** workflow. Its result (the
