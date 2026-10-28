@@ -187,9 +187,10 @@ def check_manifest(m, report, root, published=False):
         elif file.lower() in RESERVED_FILES or file.lower().startswith(RESERVED_FILE_PREFIXES):
             report.error(f"file \"{file}\" is reserved (Nvr*, nEVR* and EchoXR* are the projects' own)")
     api = m.get("api", 5)
-    # 7 adds plugin-carried assets (nevr-runtime docs/reference/plugin-assets.md); 5 and 6 still pass.
-    if api not in (5, 6, 7):
-        report.error("\"api\": 5, 6 or 7")
+    # 7 adds plugin-carried assets (nevr-runtime docs/reference/plugin-assets.md), 8 the game's main
+    # level in every context (level_symbol, level_name); 5 and 6 still pass.
+    if api not in (5, 6, 7, 8):
+        report.error("\"api\": 5, 6, 7 or 8")
     caps = m.get("capabilities")
     if not isinstance(caps, list) or not caps:
         report.error("\"capabilities\": declare at least one of " + ", ".join(CAPABILITIES))

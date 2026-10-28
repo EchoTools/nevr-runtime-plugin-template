@@ -416,10 +416,10 @@ class Manifest(unittest.TestCase):
         self.assertEqual(self.errors(file="CoolMod.dll"), [])
 
     def test_api_versions(self):
-        for api in (5, 6, 7):
+        for api in (5, 6, 7, 8):
             self.assertEqual(self.errors(api=api), [], api)
         self.assertTrue(self.errors(api=4))
-        self.assertTrue(self.errors(api=8))
+        self.assertTrue(self.errors(api=9))
 
     def test_server_mods_not_yet(self):
         self.assertTrue(self.errors(target="server"))
