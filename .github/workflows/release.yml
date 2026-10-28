@@ -1,25 +1,37 @@
-# A tag v<version> (the version in echo-mod.json, a semantic version: semver.org) publishes a
-# GitHub release: the DLL (or the pack's zip), echo-mod.json with the checksums filled in, and
-# SHA256SUMS, with a build attestation that shows they were built here, from this tag.
-# A version with a prerelease part (1.2.0-beta.1) becomes a prerelease.
+# A tag v<version> (the version in echo-mod.json, a semantic version: semver.org) builds the mod,
+# checks it, attests the release files (a build attestation that shows they were built here, from this
+# tag) and opens a DRAFT GitHub release with exactly three files:
 #
-# Keep this file as it is: the launcher only takes releases that this workflow built.
+#   <id>-v<version>-windows.zip   the DLL, LICENSE, NOTICE, the settings sheet and a SHA256SUMS
+#   echo-mod.json                 the manifest, with the package name and the source
+#   SHA256SUMS                    the zip and echo-mod.json
+#
+# The draft is not live. The project's release signer signs the DLL inside the zip and publishes the
+# release; you never upload anything. A version with a prerelease part (1.2.0-beta.1) becomes a
+# prerelease.
+#
+# Keep this file as it is: the signer only takes releases that this workflow built, and it compares
+# this file with the template's. Two jobs, on purpose: the one that builds and attests can't write to
+# the repo, the one that writes the release runs no build code.
 name: release
 
 on:
   push:
     tags: ["v*"]
 
-permissions:
-  contents: write
-  id-token: write
-  attestations: write
+permissions: {}
 
 jobs:
-  release:
+  build:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Toolchain
         run: |
@@ -28,6 +40,7 @@ jobs:
           sudo update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
           sudo update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
 
+      # GITHUB_SHA, the tag's commit, goes into the DLL as its NEVR-PLUGIN-BUILD identity.
       - name: Build, smoke test, check
         run: tools/ci-build.sh "$GITHUB_REF_NAME"
 
@@ -36,22 +49,39 @@ jobs:
           file=$(python3 -c 'import json; print(json.load(open("echo-mod.json"))["file"])')
           python3 tools/package.py --dll "build/mingw/$file"
 
-      # What the launcher's catalogue checks for every release, by the template's current rules
-      # (they may be newer than this repo's copy): a release it would refuse is never published.
+      # What the launcher's catalogue and the release signer expect of every release, by this repo's own
+      # reviewed checker (nothing is fetched here: this job can attest). A release they would refuse is
+      # never drafted.
       - name: Check the release
-        run: |
-          curl -fsSL -m 30 -o build/check_mod_current.py \
-            https://raw.githubusercontent.com/EchoTools/echo-mod-template-repo/main/tools/check_mod.py \
-            || cp tools/check_mod.py build/check_mod_current.py
-          python3 build/check_mod_current.py --published dist --tag "$GITHUB_REF_NAME" --smoke build/smoke/smoke.json
+        run: python3 tools/check_mod.py --published dist --tag "$GITHUB_REF_NAME" --smoke build/smoke/smoke.json
 
-      - uses: actions/attest-build-provenance@v2
+      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
         with:
           subject-path: dist/*
 
-      - name: Release
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dist
+          path: dist
+          if-no-files-found: error
+
+  draft:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: dist
+          path: dist
+
+      - name: Open the draft release
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
         run: |
-          pre=$(python3 -c 'import json; print("--prerelease" if json.load(open("dist/echo-mod.json"))["prerelease"] else "")')
-          gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --generate-notes --verify-tag $pre
+          flags=(--draft --verify-tag --title "$TAG" --generate-notes)
+          if [[ $(jq -r '.prerelease' dist/echo-mod.json) == true ]]; then flags+=(--prerelease); fi
+          gh release create "$TAG" dist/* -R "$REPO" "${flags[@]}"

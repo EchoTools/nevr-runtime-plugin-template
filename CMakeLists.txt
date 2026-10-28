@@ -30,6 +30,30 @@ if(NOT MOD_FILE MATCHES "^([A-Za-z0-9._-]+)\\.dll$")
 endif()
 set(MOD_STEM ${CMAKE_MATCH_1})
 
+# The commit this DLL is built from, for the NEVR-PLUGIN-BUILD literal in src/plugin.cpp (release-signer
+# compares it with the tag's commit): GITHUB_SHA in CI, `git rev-parse HEAD` on your machine, else 40 zeros.
+set(MOD_COMMIT "0000000000000000000000000000000000000000")
+set(mod_commit_from "$ENV{GITHUB_SHA}")
+if(NOT mod_commit_from)
+    find_package(Git QUIET)
+    if(GIT_FOUND)
+        execute_process(COMMAND "${GIT_EXECUTABLE}" rev-parse HEAD
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            OUTPUT_VARIABLE mod_commit_from OUTPUT_STRIP_TRAILING_WHITESPACE
+            RESULT_VARIABLE git_status ERROR_QUIET)
+        if(NOT git_status EQUAL 0)
+            set(mod_commit_from "")
+        endif()
+    endif()
+endif()
+# (CMake's regex has no {40}: check the length apart.)
+string(LENGTH "${mod_commit_from}" mod_commit_length)
+if(mod_commit_length EQUAL 40 AND mod_commit_from MATCHES "^[0-9a-f]+$")
+    set(MOD_COMMIT "${mod_commit_from}")
+elseif(mod_commit_from)
+    message(WARNING "not a full commit id: \"${mod_commit_from}\"; the build identity gets 40 zeros")
+endif()
+
 # capabilities -> NEVR_PLUGIN_CAP_* bits
 set(MOD_CAPS 0)
 string(JSON caps_count LENGTH "${MOD_JSON}" capabilities)
@@ -56,7 +80,7 @@ if(caps_count GREATER 0)
 endif()
 
 project(${MOD_STEM} VERSION ${MOD_VERSION_MAJOR}.${MOD_VERSION_MINOR}.${MOD_VERSION_PATCH} LANGUAGES C CXX)
-message(STATUS "${MOD_NAME} ${MOD_VERSION} -> ${MOD_FILE} (capabilities ${MOD_CAPS})")
+message(STATUS "${MOD_NAME} ${MOD_VERSION} -> ${MOD_FILE} (capabilities ${MOD_CAPS}, commit ${MOD_COMMIT})")
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
@@ -84,6 +108,7 @@ target_compile_definitions(mod PRIVATE
     MOD_STEM="${MOD_STEM}"
     MOD_SUMMARY="${MOD_SUMMARY}"
     MOD_VERSION="${MOD_VERSION}"
+    MOD_COMMIT="${MOD_COMMIT}"
     MOD_VERSION_MAJOR=${MOD_VERSION_MAJOR}
     MOD_VERSION_MINOR=${MOD_VERSION_MINOR}
     MOD_VERSION_PATCH=${MOD_VERSION_PATCH}

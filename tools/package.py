@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """Packs a built mod into dist/ for a GitHub release:
 
-    dist/<file>.dll             a mod (kind "mod")
-    dist/<Stem>-<version>.zip   a content pack (kind "pack"): plugins/ and content/<content id>/
-    dist/echo-mod.json          echo-mod.json with version, sha256, size, prerelease and the source filled in
-    dist/SHA256SUMS
+    dist/<id>-v<version>-windows.zip   a mod (kind "mod"): <file>.dll, LICENSE, NOTICE (if the repo has
+                                       one), <Stem>.plugin.json (if the mod has settings) and a SHA256SUMS
+                                       over those. Flat, fixed dates, so the same files make the same zip.
+    dist/<Stem>-<version>.zip          a content pack (kind "pack"): plugins/ and content/<content id>/
+    dist/echo-mod.json                 echo-mod.json with version, prerelease, package and the source
+                                       filled in; for a pack also its sha256 and size. A mod's has no
+                                       sha256 or size: the release signer changes the DLL's bytes.
+    dist/SHA256SUMS                    the zip (or a pack's) and echo-mod.json
 
     python3 tools/package.py --dll build/mingw/ExampleMod.dll
 
@@ -33,10 +37,14 @@ def sha256(path):
 
 def add(zf, path, name):
     """Adds a file with a fixed date, so the same files always make the same zip."""
+    add_bytes(zf, Path(path).read_bytes(), name)
+
+
+def add_bytes(zf, data, name):
     info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
     info.compress_type = zipfile.ZIP_DEFLATED
     info.external_attr = 0o644 << 16
-    zf.writestr(info, Path(path).read_bytes())
+    zf.writestr(info, data)
 
 
 def main():
@@ -81,9 +89,23 @@ def main():
             "plugins": [manifest["file"]],
         }
     else:
-        shutil.copyfile(args.dll, out / manifest["file"])
-        entry["sha256"] = sha256(out / manifest["file"])
-        entry["size"] = (out / manifest["file"]).stat().st_size
+        # The release signer signs the DLL inside this zip and rewrites the zip: the final hashes are
+        # in SHA256SUMS, not in echo-mod.json. LICENSE and NOTICE travel in the zip (MIT: "in all copies").
+        name = f"{manifest['id']}-v{manifest['version']}-windows.zip"
+        files = [(Path(args.dll), manifest["file"])]
+        for notice in ("LICENSE", "NOTICE"):
+            if (root / notice).is_file():
+                files.append((root / notice, notice))
+            elif notice == "LICENSE":
+                sys.exit(f"package.py: {root / notice} is missing: a release carries the mod's LICENSE")
+        if isinstance(settings, str) and settings:
+            files.append((root / settings, f"{stem}.plugin.json"))
+        inner = "".join(f"{sha256(path)}  {arcname}\n" for path, arcname in files)
+        with zipfile.ZipFile(out / name, "w") as zf:
+            for path, arcname in files:
+                add(zf, path, arcname)
+            add_bytes(zf, inner.encode("utf-8"), "SHA256SUMS")
+        entry["package"] = name
 
     if os.environ.get("GITHUB_ACTIONS") == "true":
         entry["source"] = {
@@ -95,7 +117,7 @@ def main():
         }
 
     (out / "echo-mod.json").write_text(json.dumps(entry, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    sums = "".join(f"{sha256(p)}  {p.name}\n" for p in sorted(out.iterdir()))
+    sums = "".join(f"{sha256(p)}  {p.name}\n" for p in sorted(out.iterdir()) if p.name != "SHA256SUMS")
     (out / "SHA256SUMS").write_text(sums, encoding="utf-8")
     print(sums, end="")
 

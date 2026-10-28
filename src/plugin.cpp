@@ -10,6 +10,12 @@
 
 namespace {
 
+// The build identity: one NUL-bounded literal that release-signer compares with the release's tag and
+// the commit it was built from. It is NEVR-PLUGIN-BUILD, never NEVR-BUILD (nEVR's installer takes any DLL
+// holding "NEVR-BUILD " for the runtime itself). Keep the leading \0 and keep a use of it: Init logs it, and
+// the linker's --gc-sections would drop an array nothing refers to.
+const char kBuildIdentity[] = "\0NEVR-PLUGIN-BUILD " MOD_VERSION " " MOD_COMMIT;
+
 bool g_started = false;  // Start ran and returned true
 bool g_tried = false;    // InitEx or Init was called: the host calls only one, but be safe
 
@@ -18,6 +24,7 @@ int Init(const NvrGameContext* ctx, const char* args_json) {
     g_tried = true;
     mod::OpenLog(ctx);
     mod::Log("%s %s", MOD_STEM, MOD_VERSION);
+    mod::Log("%s", kBuildIdentity + 1);
     mod::SetArgs(args_json ? args_json : "{}");
 
     uint32_t stamp = 0;
