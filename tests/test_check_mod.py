@@ -376,6 +376,29 @@ class Identity(unittest.TestCase):
             self.assertTrue(any("commit" in e for e in self.errors(path, commit="a" * 40)))
 
 
+@unittest.skipUnless(DLL.is_file(), f"no {DLL} (build first: tools/ci-build.sh)")
+class Exports(unittest.TestCase):
+    """Only the Nvr* ABI leaves the DLL (AGENTS.md rule 7; the signer refuses anything else)."""
+
+    def errors(self, path):
+        report = check_mod.Report()
+        check_mod.check_dll(str(path), MANIFEST, report)
+        return report.errors
+
+    def test_the_built_dll_exports_only_nvr_symbols(self):
+        self.assertEqual(self.errors(DLL), [])
+
+    def test_a_dll_exporting_an_extra_symbol_is_refused(self):
+        data = DLL.read_bytes()
+        old = b"\0NvrPluginShutdown\0"
+        self.assertEqual(data.count(old), 1, "export table entry not found exactly once")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / MANIFEST["file"]
+            path.write_bytes(data.replace(old, b"\0XvrPluginShutdown\0"))  # same length: the PE layout stays as it is
+            errors = self.errors(path)
+        self.assertTrue(any("XvrPluginShutdown" in e and "export" in e for e in errors), errors)
+
+
 class Manifest(unittest.TestCase):
     def errors(self, **changes):
         report = check_mod.Report()

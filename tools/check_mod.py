@@ -349,7 +349,8 @@ def check_dll(path, manifest, report, commit=None):
         report.warn(f"no export {name}")
     stray = sorted(e for e in exports if not e.startswith("Nvr"))
     if stray:
-        report.warn("exports beyond the plugin's own: " + ", ".join(stray[:10]) + (" ..." if len(stray) > 10 else ""))
+        report.error("exports other than the Nvr* plugin ABI (src/exports.def lists exactly what leaves the DLL): "
+                     + ", ".join(stray[:10]) + (" ..." if len(stray) > 10 else ""))
     check_identity(data, manifest, report, commit)
     report.note(f"{len(data)} bytes, imports: " + ", ".join(imports))
     caps = set(manifest.get("capabilities") or [])
