@@ -1,12 +1,12 @@
 // MinHook for the mod's detours. Each DLL has its own MinHook copy; this one only ever touches
 // the hooks it created itself.
+#include "hooks.h"
+
+#include <MinHook.h>
 #include <windows.h>
 
 #include <vector>
 
-#include <MinHook.h>
-
-#include "hooks.h"
 #include "mod.h"
 
 namespace mod::hooks {

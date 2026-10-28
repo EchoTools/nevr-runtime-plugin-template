@@ -26,9 +26,14 @@ mod, or nEVR won't load it.
 | `tools/check_mod.py` | The checks the release and the echo-mods review run | **never** weaken |
 | `tools/package.py` | Packs a release into `dist/` | no |
 | `tools/ci-build.sh` | Build + Wine smoke test + checks | no |
+| `tools/check_pr_title.py` | Checks a PR title is a Conventional Commits header | no |
 | `tests/smoke_host.c` | Loads the DLL like nEVR and calls its exports | no |
+| `tests/test_check_mod.py`, `tests/test_check_pr_title.py` | Tests of the checks themselves | add to them |
+| `justfile` | `just verify` and the recipes under it | rarely |
+| `.clang-format` | The code style (4 spaces, 120 columns); `just fmt` applies it | no |
 | `.github/workflows/release.yml` | Builds and publishes releases with a build attestation | **never** |
-| `.github/workflows/build.yml` | Builds and checks every push | no |
+| `.github/workflows/build.yml` | Format, lint, build, smoke test, checks and tests on every push | no |
+| `.github/workflows/pr-title-check.yml` | Fails a PR whose title isn't a Conventional Commits header | no |
 
 The launcher only takes release files built and attested by this repo's unmodified
 `release.yml`. Don't edit it, don't rename it, don't attach files to a release by hand.
@@ -36,14 +41,23 @@ The launcher only takes release files built and attested by this repo's unmodifi
 ## Commands
 
 ```sh
-cmake --preset mingw && cmake --build --preset mingw          # build/mingw/<file>.dll
-python3 tools/check_mod.py --dll build/mingw/<file>.dll        # manifest + DLL checks
-tools/ci-build.sh                                              # all of it, with the Wine smoke test (Linux)
-cmake -S . -B build/mh -G Ninja -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-toolchain.cmake -DECHO_MOD_MINHOOK=ON
-cmake -S . -B build/assets -G Ninja -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-toolchain.cmake -DECHO_MOD_ASSET_EXAMPLE=ON  # needs "api": 7
+just verify       # the whole gate: lint, check, test (Linux: MinGW-w64, CMake, Ninja, Wine, clang-format, shellcheck)
+just build        # build/mingw/<file>.dll, warnings are errors
+just check        # build, Wine smoke test, manifest + DLL checks, then pack a release and check that
+just test         # the tests of the checks
+just lint         # clang-format check, shellcheck, Python compile
+just fmt          # apply .clang-format
 ```
 
-A change is done when `tools/ci-build.sh` passes (or the **build** workflow on GitHub).
+Without `just`: `cmake --preset mingw && cmake --build --preset mingw`, then
+`python3 tools/check_mod.py --dll build/mingw/<file>.dll`; `tools/ci-build.sh` does the build, the
+smoke test and the checks. With MinHook:
+`cmake -S . -B build/mh -G Ninja -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-toolchain.cmake -DECHO_MOD_MINHOOK=ON`.
+With the plugin-asset example (needs `"api": 7`):
+`cmake -S . -B build/assets -G Ninja -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-toolchain.cmake -DECHO_MOD_ASSET_EXAMPLE=ON`.
+
+A change is done when `just verify` passes (or the **build** workflow on GitHub, which runs the
+same steps).
 
 ## echo-mod.json
 
@@ -164,6 +178,54 @@ beside its own plugins. A mod should work there too or return non-zero from init
 13. **Never write into the game's folders** except the mod's own log folder and a settings file
     the `.plugin.json` names. Never touch other plugins' files, `config.yaml`, or `BugSplat64.dll`.
 
+## Commits and PR titles
+
+Commits and PR titles follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/):
+`<type>[(scope)][!]: <description>`. Types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`,
+`test`, `build`, `ci`, `chore`, `revert`. A breaking change (for players or for other mods) is marked
+with `!` before the colon or a `BREAKING CHANGE:` footer. The commit message says what changed and why.
+`pr-title-check.yml` (`tools/check_pr_title.py`) fails a PR with any other title.
+
+Versions are [SemVer](https://semver.org/) and tags are `v<version>` (see Releasing). There is no
+changelog file: the git log is the changelog.
+
+## Credit
+
+Credit the people whose work you build on, every time:
+
+- A commit that draws on a person's code, patch, research or findings carries a `Co-Authored-By`
+  trailer for them: `Co-Authored-By: Name <id+login@users.noreply.github.com>` (`gh api users/<login>`
+  gives the id). Someone with no GitHub account is credited by name in the commit body. A squash merge
+  keeps the trailers, so keep them in the PR body too.
+- Say who they are in the README, and in `NOTICE` when you carry their code. Keep the licence of
+  anything you copy: `LICENSE` stays plain text of one licence (GitHub must recognise it, and the echo-mods review checks), and any
+  further notice goes in `NOTICE`.
+
+## Platforms
+
+Mods are for Echo VR on PC (Windows, and Linux through Proton). The template has no Quest build, so
+Quest parity is **not applicable**: say so in the PR body when you change what players see ("Quest: not
+applicable, PC-only template"). If your mod gains a Quest twin, a change to player-facing behaviour
+says in its PR body what the other platform's status is: done in this PR, already present
+(`file:line`), not applicable (why), or a linked issue for the twin.
+
+## Taking someone else's patch
+
+Nothing from another project's patch, hook or address list is taken verbatim. Before you build an
+equivalent, reconstruct and analyse the patched code: every function the patch touches, its callers,
+and what each byte change does. Write down what you found (in the PR body or a doc in the repo), then
+design your own implementation from that understanding, to this template's standard: checked bytes
+(rule 3), a log line, a test, a stated expectation. Their address list says where to look; it is not
+the design. If the same site is already hooked by nEVR, use what nEVR offers (rule 4).
+
+## Prefer a hook to a byte patch
+
+Replace or wrap a function with a hook (`hooks::Hook`, `-DECHO_MOD_MINHOOK=ON`) whose code says, in
+readable C++, what the original did and what you change. A byte patch or NOP is the exception, for
+where a hook would cost something measurable (a per-frame hot path, a call too frequent to detour).
+The PR names the case and the reason, and a number where it can. Either way the bytes are checked
+first (rule 3).
+
 ## Options and settings
 
 The launcher passes `args` from `config.yaml` to `NvrPluginInitEx`: a flat object, all values
@@ -270,9 +332,16 @@ tests the checks themselves.
   copied on the launcher's EchoVRCE page; usernames are refused). The same list opens the
   author's `private` mods. `ACCESS-STATUS.txt` there says what was found.
 
+## Before you push
+
+Run `just verify`. Put the commands you ran and what they printed in the PR body; don't write "tested"
+without the output.
+
 ## Before you say it's done
 
 - [ ] `echo-mod.json` has the real `id`, `name`, `summary`, `author`, `file`, `license`, and a semver `version`
+- [ ] `just verify` passes
+- [ ] the PR title is a Conventional Commits header, and anyone whose work you used has a `Co-Authored-By`
 - [ ] `<Stem>.plugin.json` renamed to match `file`, `settings` points at it (or both removed)
 - [ ] capabilities match the code
 - [ ] `tools/ci-build.sh` (or the build workflow) passes with no errors

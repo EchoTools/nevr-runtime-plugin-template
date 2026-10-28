@@ -8,7 +8,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 file=$(python3 -c 'import json; print(json.load(open("echo-mod.json"))["file"])')
-cmake --preset mingw
+# Warnings are errors here, as in CI (ECHO_MOD_WERROR); a plain `cmake --preset mingw` keeps them warnings.
+cmake --preset mingw -DECHO_MOD_WERROR=ON
 cmake --build --preset mingw
 
 # The DLL alone in a folder of its own, as in the game's plugins folder: anything it needs

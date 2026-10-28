@@ -1,0 +1,8 @@
+# Kept to keys every clang-format since 14 knows, so the same file works locally and in CI.
+# Google style as in nevr-runtime, with 4-space indent (as .editorconfig says) and 120 columns.
+# Preserve include blocks: the Windows headers must keep their order (windows.h first).
+Language: Cpp
+BasedOnStyle: Google
+IndentWidth: 4
+ColumnLimit: 120
+IncludeBlocks: Preserve

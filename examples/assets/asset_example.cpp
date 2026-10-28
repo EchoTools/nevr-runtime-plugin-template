@@ -30,8 +30,8 @@ alignas(16) const uint8_t kExampleBytes[] = {'E', 'X', 'A', 'M', 'P', 'L', 'E', 
 // Called from Start, so from NvrPluginInit or NvrPluginInitEx. Returns false only when nothing was registered,
 // so there is nothing for Shutdown to undo on the failure path.
 bool AssetExampleStart() {
-    const int status = nevr::RegisterAsset(kExampleType, kExampleName, kExampleBytes, sizeof(kExampleBytes),
-                                           "example-asset");
+    const int status =
+        nevr::RegisterAsset(kExampleType, kExampleName, kExampleBytes, sizeof(kExampleBytes), "example-asset");
     switch (status) {
         case NEVR_ASSET_OK:
             Log("asset example: registered (%zu bytes)", sizeof(kExampleBytes));

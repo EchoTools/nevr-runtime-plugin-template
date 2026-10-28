@@ -7,7 +7,7 @@ namespace mod {
 namespace {
 uint64_t g_frames = 0;
 bool g_logStates = true;
-}
+}  // namespace
 
 bool Start(const NvrGameContext* ctx) {
     bool server = (ctx && (ctx->flags & NEVR_HOST_IS_SERVER)) || HasFlag(L"-server");
@@ -36,7 +36,8 @@ bool Start(const NvrGameContext* ctx) {
 void Frame(const NvrGameContext*) { g_frames++; }
 
 void StateChanged(const NvrGameContext*, uint32_t old_state, uint32_t new_state) {
-    if (g_logStates) Log("game state %u -> %u (frame %llu)", old_state, new_state, static_cast<unsigned long long>(g_frames));
+    if (g_logStates)
+        Log("game state %u -> %u (frame %llu)", old_state, new_state, static_cast<unsigned long long>(g_frames));
 }
 
 void Stop() {

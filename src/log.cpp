@@ -28,8 +28,8 @@ void Write(uint32_t level, const char* format, va_list args) {
         SYSTEMTIME t;
         GetLocalTime(&t);
         static const char* const kLevels[] = {"debug", "info", "warning", "error"};
-        fprintf(g_file, "%04u-%02u-%02u %02u:%02u:%02u.%03u %s %s\n", t.wYear, t.wMonth, t.wDay, t.wHour,
-                t.wMinute, t.wSecond, t.wMilliseconds, kLevels[level & 3], line);
+        fprintf(g_file, "%04u-%02u-%02u %02u:%02u:%02u.%03u %s %s\n", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute,
+                t.wSecond, t.wMilliseconds, kLevels[level & 3], line);
         fflush(g_file);
     }
     if (g_hostLog && g_pluginId) g_hostLog(g_pluginId, level, line, nullptr, 0);

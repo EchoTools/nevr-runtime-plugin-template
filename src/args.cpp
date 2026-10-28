@@ -23,14 +23,30 @@ bool ReadString(const char*& p, std::string& out) {
         }
         p++;
         switch (*p) {
-            case '"': out += '"'; break;
-            case '\\': out += '\\'; break;
-            case '/': out += '/'; break;
-            case 'b': out += '\b'; break;
-            case 'f': out += '\f'; break;
-            case 'n': out += '\n'; break;
-            case 'r': out += '\r'; break;
-            case 't': out += '\t'; break;
+            case '"':
+                out += '"';
+                break;
+            case '\\':
+                out += '\\';
+                break;
+            case '/':
+                out += '/';
+                break;
+            case 'b':
+                out += '\b';
+                break;
+            case 'f':
+                out += '\f';
+                break;
+            case 'n':
+                out += '\n';
+                break;
+            case 'r':
+                out += '\r';
+                break;
+            case 't':
+                out += '\t';
+                break;
             case 'u': {
                 // \uXXXX as UTF-8 (a surrogate pair's halves each on their own: rare in options).
                 char hex[5] = {};
@@ -52,7 +68,8 @@ bool ReadString(const char*& p, std::string& out) {
                 }
                 break;
             }
-            default: return false;
+            default:
+                return false;
         }
         p++;
     }

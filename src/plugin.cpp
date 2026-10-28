@@ -22,8 +22,8 @@ int Init(const NvrGameContext* ctx, const char* args_json) {
 
     uint32_t stamp = 0;
     if (!mod::IsLiveBuild(&stamp)) {
-        mod::Log("not echovr.exe 631547 (PE timestamp 0x%08X, wants 0x%08X): not loaded",
-                 static_cast<unsigned>(stamp), static_cast<unsigned>(mod::kLiveBuildStamp));
+        mod::Log("not echovr.exe 631547 (PE timestamp 0x%08X, wants 0x%08X): not loaded", static_cast<unsigned>(stamp),
+                 static_cast<unsigned>(mod::kLiveBuildStamp));
         return 1;
     }
 #ifdef ECHO_MOD_MINHOOK
