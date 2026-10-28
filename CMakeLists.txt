@@ -146,6 +146,21 @@ endif()
 # newer compiler never blocks someone's local build.
 option(ECHO_MOD_WERROR "Treat compiler warnings as errors" OFF)
 
+# Off by default: the plugin-asset example (examples/assets). It registers an asset, so it needs API 7.
+option(ECHO_MOD_ASSET_EXAMPLE "Build the plugin-asset example (examples/assets/asset_example.cpp)" OFF)
+if(ECHO_MOD_ASSET_EXAMPLE)
+    if(MOD_API LESS 7)
+        message(FATAL_ERROR "ECHO_MOD_ASSET_EXAMPLE needs \"api\": 7 in echo-mod.json (plugin assets are API v7)")
+    endif()
+    target_sources(mod PRIVATE examples/assets/asset_example.cpp)
+    target_compile_definitions(mod PRIVATE ECHO_MOD_ASSET_EXAMPLE=1)
+    if(NOT MSVC)
+        # include/plugin_assets.h (a copy of nevr-runtime's, never hand-edited) casts GetProcAddress results
+        # to function pointers, which -Wextra flags; keep that from failing a -DECHO_MOD_WERROR=ON build.
+        set_source_files_properties(examples/assets/asset_example.cpp PROPERTIES COMPILE_OPTIONS -Wno-error=cast-function-type)
+    endif()
+endif()
+
 if(MSVC)
     target_compile_options(mod PRIVATE /W4 /utf-8)
     if(ECHO_MOD_WERROR)

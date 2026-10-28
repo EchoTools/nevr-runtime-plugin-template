@@ -19,7 +19,9 @@ mod, or nEVR won't load it.
 | `src/log.cpp`, `src/args.cpp`, `src/game.cpp` | The helpers from `mod.h` | rarely |
 | `src/hooks.cpp`, `src/hooks.h` | MinHook detours, built only with `-DECHO_MOD_MINHOOK=ON` | rarely |
 | `src/exports.def` | Exactly the exports the DLL has | no |
-| `include/nevr_plugin_interface.h` | The nEVR plugin ABI (v6 layout, works with v5 hosts) | **never** |
+| `include/nevr_plugin_interface.h` | The nEVR plugin ABI, v7: a copy of nevr-runtime's header (commit in its top comment), plus the template's `NEVR_CTX_HAS` | **never** hand-edit: re-copy from nevr-runtime |
+| `include/plugin_assets.h` | Plugin-asset wrappers (API v7): `nevr::RegisterAsset`, `nevr::DeregisterAssets`. A copy of nevr-runtime's | **never** hand-edit: re-copy |
+| `examples/assets/asset_example.cpp` | Registers one plugin-carried asset, off by default (`-DECHO_MOD_ASSET_EXAMPLE=ON`, needs `"api": 7`) | example, not built by default |
 | `<Stem>.plugin.json` | The settings the launcher shows for the mod | yes |
 | `tools/check_mod.py` | The checks the release and the echo-mods review run | **never** weaken |
 | `tools/package.py` | Packs a release into `dist/` | no |
@@ -52,6 +54,8 @@ Without `just`: `cmake --preset mingw && cmake --build --preset mingw`, then
 `python3 tools/check_mod.py --dll build/mingw/<file>.dll`; `tools/ci-build.sh` does the build, the
 smoke test and the checks. With MinHook:
 `cmake -S . -B build/mh -G Ninja -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-toolchain.cmake -DECHO_MOD_MINHOOK=ON`.
+With the plugin-asset example (needs `"api": 7`):
+`cmake -S . -B build/assets -G Ninja -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-toolchain.cmake -DECHO_MOD_ASSET_EXAMPLE=ON`.
 
 A change is done when `just verify` passes (or the **build** workflow on GitHub, which runs the
 same steps).
@@ -89,7 +93,7 @@ same steps).
 | `version` | A [semantic version](https://semver.org/): `MAJOR.MINOR.PATCH`, optional `-prerelease`, optional `+build`. No `v` here. A prerelease part makes the release a prerelease. Build metadata doesn't count when versions are compared, so `1.0.0+a` and `1.0.0+b` are the same version |
 | `kind` | `mod` (one DLL); `pack` (DLL + content, below) isn't published yet |
 | `file` | `^[A-Za-z0-9._-]{1,64}\.dll$`, unique among all mods, never changes after approval (the maintainers can rename it). Reserved: `BugSplat64.dll`, `dbgcore.dll`, `nevr.dll`, `log_filter.dll`, the game's own DLLs, and every name starting with `Nvr`, `nEVR` or `EchoXR` (any case) |
-| `api` | The plugin API version reported to nEVR: `5` (default, runs on every nEVR the launcher ships without a warning) or `6` |
+| `api` | The plugin API version reported to nEVR: `5` (default, runs on every nEVR the launcher ships without a warning), `6`, or `7` (carries plugin assets, see below) |
 | `capabilities` | At least one of `observes-only`, `cosmetic`, `alters-gameplay`, `alters-rules`, `network`, `hooks-engine`. `observes-only` stands alone. Importing a network DLL (`ws2_32`, `wininet`, `winhttp`, ...) needs `network`; installing hooks needs `hooks-engine` |
 | `target` | `client` or `both` (`server`, game servers only, isn't published yet) |
 | `visibility` | `public` (listed), `unlisted` (only by id: More mods → Add by id) or `private` (only the author's EchoVRCE account and the account IDs in their `access.json`). The newest release that isn't a prerelease decides |
@@ -254,6 +258,32 @@ args. The release puts its `settings` object into the published `echo-mod.json`.
 
 Resource overrides replace a game resource as it is read. `data` must stay valid while the
 override is registered.
+
+## Plugin assets (API v7)
+
+A plugin can carry a level or resource inside its own DLL and register it with nEVR: no extraction, no
+copy. The template has the wrappers and one example:
+
+- `include/plugin_assets.h`: `nevr::RegisterAsset(type_hash, name_hash, data, size, label)` returns an
+  `NevrAssetStatus` (or `NEVR_ASSET_UNAVAILABLE`, -1, on a host with no asset exports) and
+  `nevr::DeregisterAssets(start, end)`.
+- `examples/assets/asset_example.cpp`: registers one asset from `mod::Start` (so from `NvrPluginInit`/`InitEx`),
+  checks the status, and deregisters from `mod::Stop` (which `NvrPluginShutdown` calls). It is compiled only with
+  `cmake -DECHO_MOD_ASSET_EXAMPLE=ON`, and CMake refuses that unless `echo-mod.json` says `"api": 7`. The
+  placeholder hashes and bytes in it must be replaced; a mod that ships assets says so in its `summary`.
+
+Rules that come with it:
+
+- **Assets are not a capability.** nevr-runtime's `NvrPluginCapabilities` has no asset bit
+  (`src/extension/plugin_interface.h:249-261`; `HOOKS_ENGINE` is the last, at :259). Don't add one to
+  `echo-mod.json`. A plugin that carries assets sets `"api": 7` and declares what it does.
+- Keep `data` in the DLL's image (a `const` array or a resource section), never on the heap. It must stay valid
+  until the asset is deregistered.
+- Register in init, before the engine loads the name. A refused registration (`NEVR_ASSET_ALREADY_LOADED`,
+  `DUPLICATE`, `BAD_ARGUMENT`) is a log warning on the host side too: check the status and log it.
+- The contract (exports, status values, lifetime, what is served, what the login reports) is in nevr-runtime
+  [docs/reference/plugin-assets.md](https://github.com/EchoTools/nevr-runtime/blob/main/docs/reference/plugin-assets.md).
+  Read it there, not from a copy.
 
 ## Content packs (`kind: "pack"`)
 

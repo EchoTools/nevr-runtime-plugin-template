@@ -187,8 +187,9 @@ def check_manifest(m, report, root, published=False):
         elif file.lower() in RESERVED_FILES or file.lower().startswith(RESERVED_FILE_PREFIXES):
             report.error(f"file \"{file}\" is reserved (Nvr*, nEVR* and EchoXR* are the projects' own)")
     api = m.get("api", 5)
-    if api not in (5, 6):
-        report.error("\"api\": 5 or 6")
+    # 7 adds plugin-carried assets (nevr-runtime docs/reference/plugin-assets.md); 5 and 6 still pass.
+    if api not in (5, 6, 7):
+        report.error("\"api\": 5, 6 or 7")
     caps = m.get("capabilities")
     if not isinstance(caps, list) or not caps:
         report.error("\"capabilities\": declare at least one of " + ", ".join(CAPABILITIES))
