@@ -19,7 +19,7 @@ mod, or nEVR won't load it.
 | `src/log.cpp`, `src/args.cpp`, `src/game.cpp` | The helpers from `mod.h` | rarely |
 | `src/hooks.cpp`, `src/hooks.h` | MinHook detours, built only with `-DECHO_MOD_MINHOOK=ON` | rarely |
 | `src/exports.def` | Exactly the exports the DLL has | no |
-| `include/nevr_plugin_interface.h` | The nEVR plugin ABI, v7: a copy of nevr-runtime's header (commit in its top comment), plus the template's `NEVR_CTX_HAS` | **never** hand-edit: re-copy from nevr-runtime |
+| `include/nevr_plugin_interface.h` | The nEVR plugin ABI, v8: a copy of nevr-runtime's header (commit in its top comment), plus the template's `NEVR_CTX_HAS` | **never** hand-edit: re-copy from nevr-runtime |
 | `include/plugin_assets.h` | Plugin-asset wrappers (API v7): `nevr::RegisterAsset`, `nevr::DeregisterAssets`. A copy of nevr-runtime's | **never** hand-edit: re-copy |
 | `examples/assets/asset_example.cpp` | Registers one plugin-carried asset, off by default (`-DECHO_MOD_ASSET_EXAMPLE=ON`, needs `"api": 7`) | example, not built by default |
 | `<Stem>.plugin.json` | The settings the launcher shows for the mod | yes |
