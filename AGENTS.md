@@ -95,7 +95,7 @@ same steps).
 | `file` | `^[A-Za-z0-9._-]{1,64}\.dll$`, unique among all mods, never changes after approval (the maintainers can rename it). Reserved: `BugSplat64.dll`, `dbgcore.dll`, `nevr.dll`, `log_filter.dll`, the game's own DLLs, and every name starting with `Nvr`, `nEVR` or `EchoXR` (any case) |
 | `api` | The plugin API version reported to nEVR: `5` (default, runs on every nEVR the launcher ships without a warning), `6`, or `7` (carries plugin assets, see below) |
 | `capabilities` | At least one of `observes-only`, `cosmetic`, `alters-gameplay`, `alters-rules`, `network`, `hooks-engine`. `observes-only` stands alone. Importing a network DLL (`ws2_32`, `wininet`, `winhttp`, ...) needs `network`; installing hooks needs `hooks-engine` |
-| `target` | `client` or `both` (`server`, game servers only, isn't published yet) |
+| `target` | Where it loads: `client` (players' games, the default), `server` (game servers only) or `both`. Launchers and the server tools leave a mod out where its target doesn't fit; on `both`, read `IS_SERVER` / `IS_CLIENT` in the host flags to tell the two apart |
 | `visibility` | `public` (listed), `unlisted` (only by id: More mods → Add by id) or `private` (only the author's EchoVRCE account and the account IDs in their `access.json`). The newest release that isn't a prerelease decides |
 | `requires.nevr` | A version range of nEVR: comparators `>=`, `>`, `<=`, `<`, `=`, `^`, `~`, space-separated (`>=4.1.0 <6.0.0`), or `*` |
 | `requires.mods` | `[{"id": "other-mod", "version": ">=1.2.0"}]`: mods that must be on too |

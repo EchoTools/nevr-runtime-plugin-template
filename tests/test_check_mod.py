@@ -421,8 +421,10 @@ class Manifest(unittest.TestCase):
         self.assertTrue(self.errors(api=4))
         self.assertTrue(self.errors(api=8))
 
-    def test_server_mods_not_yet(self):
-        self.assertTrue(self.errors(target="server"))
+    def test_targets(self):
+        for target in ("client", "server", "both"):
+            self.assertEqual(self.errors(target=target), [], target)
+        self.assertTrue(self.errors(target="everywhere"))
 
     def test_packs_come_later(self):
         self.assertIn(check_mod.PACKS_LATER, self.errors(kind="pack", pack={"content": "test-content"}))

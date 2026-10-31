@@ -66,8 +66,6 @@ RESERVED_IDS = {
 # Whole families: nEVR's and EchoXR's names, and the launcher's own Nvr*.dll plugins.
 RESERVED_ID_PREFIXES = ("nevr", "echoxr", "echotools")
 RESERVED_FILE_PREFIXES = ("nvr", "nevr", "echoxr")
-# Not published yet: mods for game servers.
-UNPUBLISHED_TARGETS = {"server"}
 # Content packs (game data beside the DLL) aren't published yet: players' launchers can't
 # install them until the content overlay is in the launcher's own catalogue.
 UNPUBLISHED_KINDS = {"pack"}
@@ -202,9 +200,6 @@ def check_manifest(m, report, root, published=False):
                          "doesn't only observe")
     if m.get("target", "client") not in TARGETS:
         report.error(f"\"target\": one of {sorted(TARGETS)}")
-    elif m.get("target", "client") in UNPUBLISHED_TARGETS:
-        report.error("\"target\": \"server\" isn't published yet (mods for game servers come later): "
-                     "\"client\" or \"both\"")
     if m.get("visibility", "public") not in VISIBILITY:
         report.error(f"\"visibility\": one of {sorted(VISIBILITY)}")
     for flag in ("required", "shipped"):
